@@ -4,7 +4,8 @@ A Node.js/TypeScript REST API built with Express and Redis that manages restaura
 
 ## Features
 
-- **Restaurant Management**: CRUD operations for restaurants
+- **Restaurant Management**: CRUD operations for restaurants with Redis caching
+- **Performance Demo**: Artificial delays show the benefit of caching
 - **Cuisine Filtering**: Dynamic cuisine categorization
 - **Redis Search**: Full-text search capabilities with indexed data
 - **Bloom Filters**: Efficient existence checking for restaurants
@@ -70,11 +71,11 @@ redis-dev/
    ```bash
    docker-compose up -d
    ```
-
-4. **Run the database seeding**
-   ```bash
-   docker exec -it redis-dev-app-1 npm run seed
-   ```
+   
+   The application will automatically:
+   - Install dependencies
+   - Run database seeding (indexes + bloom filters)
+   - Start the development server
 
 ### Environment Variables
 
@@ -83,14 +84,40 @@ redis-dev/
 | `REDIS_PASSWORD` | Password for Redis authentication | `yourpassword` |
 | `PORT` | Application server port | `3000` |
 
+## Caching Demonstration
+
+The `GET /restaurants/:id` endpoint demonstrates Redis caching with artificial delays:
+
+- **Cache Hit**: Instant response (< 50ms) with cached data
+- **Cache Miss**: 2-second artificial delay simulating slow database/API calls
+- **Cache Duration**: 5 minutes (300 seconds)
+
+Try making the same request twice to see the dramatic performance difference!
+
+```bash
+# First request - slow (2s delay)
+curl http://localhost:3000/restaurants/your-restaurant-id
+
+# Second request - instant (from cache)
+curl http://localhost:3000/restaurants/your-restaurant-id
+```
+
 ## API Endpoints
 
 ### Restaurants
 - `GET /restaurants` - Get all restaurants
 - `POST /restaurants` - Create a new restaurant
-- `GET /restaurants/:id` - Get a specific restaurant
+- `GET /restaurants/:id` - Get a specific restaurant (cached with 2s artificial delay on cache miss)
 - `PUT /restaurants/:id` - Update a restaurant
 - `DELETE /restaurants/:id` - Delete a restaurant
+- `GET /restaurants/search?q=name` - Search restaurants by name
+
+### Restaurant Details & Reviews
+- `POST /restaurants/:id/details` - Add restaurant details (JSON)
+- `GET /restaurants/:id/details` - Get restaurant details
+- `POST /restaurants/:id/reviews` - Add a review
+- `GET /restaurants/:id/reviews` - Get restaurant reviews
+- `DELETE /restaurants/:id/reviews/:reviewId` - Delete a review
 
 ### Cuisines
 - `GET /cuisines` - Get all available cuisines
@@ -114,15 +141,13 @@ docker-compose down
 
 ### Seeding the Database
 
-The seed script sets up Redis search indexes and bloom filters:
+The seed script runs automatically when starting the Docker containers and sets up Redis search indexes and bloom filters.
+
+To manually re-run seeding:
 
 ```bash
 # Run both index creation and bloom filter setup
 docker exec -it redis-dev-app-1 npm run seed
-
-# Or run individually
-docker exec -it redis-dev-app-1 npm run seed:index
-docker exec -it redis-dev-app-1 npm run seed:bloom
 ```
 
 ### Available Scripts
@@ -152,8 +177,12 @@ Access the Redis visual interface at: http://localhost:8001
 
 ### Keys Pattern
 
-- `app:restaurants:{id}` - Individual restaurant data
-- `app:cuisine:{name}` - Cuisine-specific data
+- `app:restaurants:{id}` - Individual restaurant data (hash)
+- `app:cuisine:{name}` - Cuisine-specific restaurant sets
+- `app:restaurant_details:{id}` - Restaurant details (JSON)
+- `app:reviews:{id}` - Restaurant review lists
+- `app:review_details:{id}` - Individual review data
+- `cache:restaurant:{id}` - Cached restaurant data (5min TTL)
 - `app:idx:restaurants` - Search index for restaurants
 - `app:bloom_restaurants` - Bloom filter for restaurant existence
 

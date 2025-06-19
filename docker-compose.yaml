@@ -21,7 +21,7 @@ services:
     environment:
       - PORT=3000
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    command: sh -c "npm install -g && npm run dev"
+    command: sh -c "npm install -g && sleep 5 && npm run seed && npm run dev"
     depends_on:
       - redis
     stdin_open: true

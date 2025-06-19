@@ -4,7 +4,7 @@ import { validate } from "../middlewares/validate.js"
 import { RestaurantDetailsSchema, RestaurantSchema, type Restaurant, type RestaurantDetails } from "../schemas/resaurant.js"
 import { initializeRedisClient } from "../utils/client.js"
 import { nanoid } from "nanoid"
-import { cuisineKey, restaurantBloomKey, restaurantCuisinesKeyById, restaurantDetailsKeyById, restaurantKeyById, restaurantsByRatingKey, restaurantsIndexKey, reviewDetailsKeyById, reviewKeyById, weatherKeyById } from "../utils/keys.js"
+import { cuisineKey, restaurantBloomKey, restaurantCuisinesKeyById, restaurantDetailsKeyById, restaurantKeyById, restaurantsByRatingKey, restaurantsIndexKey, reviewDetailsKeyById, reviewKeyById } from "../utils/keys.js"
 import { successResponse, errorResponse } from "../utils/responses.js"
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId.js"
 import { ReviewSchema, type Review } from "../schemas/reviews.js"
@@ -102,42 +102,6 @@ router.get("/:restaurantId/details", checkRestaurantExists, async (req: Request,
     }
 })
 
-router.get("/:restaurantId/weather", checkRestaurantExists, async (req: Request, res: Response, next: NextFunction) => {
-    const {restaurantId} = req.params as { restaurantId: string }
-    try {
-        const client = await initializeRedisClient()
-        const weatherKey = weatherKeyById(restaurantId)
-        const cachedWeather = await client.get(weatherKey)
-        if(cachedWeather) {
-            console.log("from cache", cachedWeather)
-            successResponse(res, JSON.parse(cachedWeather))
-            return
-        }
-
-        const restaurantKey = restaurantKeyById(restaurantId)
-        const coords = await client.hGet(restaurantKey, "location")
-
-        if(!coords) {
-             errorResponse(res,404, "Restaurant has no location")
-             return
-        }
-        const [lat,lon] = coords.split(",")
-        const apiResponse = await fetch(`https://api.openweathermap.org/data/2.5/weather?units=imperial&lat=${lat}&lon=${lon}&appid=${process.env.WEATHER_API_KEY}`)
-        if(apiResponse.status === 200) {
-            const json = await apiResponse.json()
-             await client.set(weatherKey, JSON.stringify(json), {EX: 60 * 60})
-            successResponse(res, json)
-        }
-        else{
-            console.log(apiResponse)
-        }
-       errorResponse(res, 500, "Couldn't get weather information")
-       return
-    } catch(err) {
-        next(err)
-    }
-})
-
 router.post("/:restaurantId/reviews", checkRestaurantExists, validate(ReviewSchema), async (req: Request, res: Response, next: NextFunction) => {
     const {restaurantId} = req.params as { restaurantId: string }
  
@@ -213,8 +177,31 @@ router.get("/:restaurantId", checkRestaurantExists, async (req: Request, res: Re
     try {
         const client = await initializeRedisClient()
         const restaurantKey = restaurantKeyById(restaurantId)
-        const [viewCount, restaurant] = await Promise.all([client.hIncrBy(restaurantKey, "viewCount", 1), client.hGetAll(restaurantKey)])
-        successResponse(res, restaurant)
+        const cacheKey = `cache:restaurant:${restaurantId}`
+        
+        // Check cache first
+        const cachedRestaurant = await client.get(cacheKey)
+        if (cachedRestaurant) {
+            console.log("🚀 Serving from cache - instant response!")
+            const restaurant = JSON.parse(cachedRestaurant)
+            successResponse(res, restaurant, "Retrieved from cache")
+            return
+        }
+
+        // Simulate "slow" database/API call with artificial delay
+        console.log("⏳ Cache miss - simulating slow database query...")
+        await new Promise(resolve => setTimeout(resolve, 500)) // artificial delay
+
+        const [viewCount, restaurant] = await Promise.all([
+            client.hIncrBy(restaurantKey, "viewCount", 1), 
+            client.hGetAll(restaurantKey)
+        ])
+
+        // Cache the result for 5 minutes
+        await client.set(cacheKey, JSON.stringify(restaurant), {EX: 300})
+        console.log("💾 Cached result for future requests")
+        
+        successResponse(res, restaurant, "Retrieved from database (cached for next time)")
     } catch(err) {
         next(err)
     }
