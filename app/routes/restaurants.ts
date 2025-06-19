@@ -1,10 +1,10 @@
 import express from "express"
 import type { Request, Response, NextFunction } from "express"
 import { validate } from "../middlewares/validate.js"
-import { RestaurantSchema, type Restaurant } from "../schemas/resaurant.js"
+import { RestaurantDetailsSchema, RestaurantSchema, type Restaurant, type RestaurantDetails } from "../schemas/resaurant.js"
 import { initializeRedisClient } from "../utils/client.js"
 import { nanoid } from "nanoid"
-import { cuisineKey, restaurantCuisinesKeyById, restaurantKeyById, restaurantsByRatingKey, reviewDetailsKeyById, reviewKeyById, weatherKeyById } from "../utils/keys.js"
+import { cuisineKey, restaurantCuisinesKeyById, restaurantDetailsKeyById, restaurantKeyById, restaurantsByRatingKey, reviewDetailsKeyById, reviewKeyById, weatherKeyById } from "../utils/keys.js"
 import { successResponse, errorResponse } from "../utils/responses.js"
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId.js"
 import { ReviewSchema, type Review } from "../schemas/reviews.js"
@@ -49,6 +49,36 @@ router.post("/", validate(RestaurantSchema), async (req: Request, res: Response,
         ])
         console.log(`Added ${addResult} fields`)
         successResponse(res, hashData, "Added new restaurant")
+    } catch(err) {
+        next(err)
+    }
+})
+
+router.post("/:restaurantId/details", checkRestaurantExists, validate(RestaurantDetailsSchema), async (req: Request, res: Response, next: NextFunction) => {
+    const {restaurantId} = req.params as { restaurantId: string }
+    const data = req.body as RestaurantDetails
+
+    try {
+        const client = await initializeRedisClient()
+        const restaurantDetailsKey = restaurantDetailsKeyById(restaurantId)
+       await client.json.set(restaurantDetailsKey, ".", data)
+        successResponse(res, data, "Added new restaurant details")
+        return
+    } catch(err) {
+        next(err)
+    }
+})
+
+router.get("/:restaurantId/details", checkRestaurantExists, async (req: Request, res: Response, next: NextFunction) => {
+    const {restaurantId} = req.params as { restaurantId: string }
+    const data = req.body as RestaurantDetails
+
+    try {
+        const client = await initializeRedisClient()
+        const restaurantDetailsKey = restaurantDetailsKeyById(restaurantId)
+       const details = await client.json.get(restaurantDetailsKey)
+        successResponse(res, details, "got restaurant details")
+        return
     } catch(err) {
         next(err)
     }
