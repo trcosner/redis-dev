@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis/redis-stack:latest
+    container_name: redis-stack
+    ports:
+      - "6379:6379"
+      - "8001:8001"  # RedisInsight dashboard
+    environment:
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD}"
+    restart: unless-stopped
+
+  app:
+    image: node:20  # or python:3.11 etc.
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    stdin_open: true
+    tty: true
+    depends_on:
+      - redis
