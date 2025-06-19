@@ -5,7 +5,7 @@ import { errorResponse
  } from "../utils/responses.js"
 
  export const checkRestaurantExists = async (req: Request, res: Response, next: NextFunction) => {
-    const id = req.params.id
+    const id = req.params.restaurantId
     if(!id){
         errorResponse(res, 400, "Restaurant ID not found")
         return
