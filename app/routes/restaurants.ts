@@ -4,7 +4,7 @@ import { validate } from "../middlewares/validate.js"
 import { RestaurantDetailsSchema, RestaurantSchema, type Restaurant, type RestaurantDetails } from "../schemas/resaurant.js"
 import { initializeRedisClient } from "../utils/client.js"
 import { nanoid } from "nanoid"
-import { cuisineKey, restaurantCuisinesKeyById, restaurantDetailsKeyById, restaurantKeyById, restaurantsByRatingKey, reviewDetailsKeyById, reviewKeyById, weatherKeyById } from "../utils/keys.js"
+import { cuisineKey, restaurantBloomKey, restaurantCuisinesKeyById, restaurantDetailsKeyById, restaurantKeyById, restaurantsByRatingKey, restaurantsIndexKey, reviewDetailsKeyById, reviewKeyById, weatherKeyById } from "../utils/keys.js"
 import { successResponse, errorResponse } from "../utils/responses.js"
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId.js"
 import { ReviewSchema, type Review } from "../schemas/reviews.js"
@@ -34,6 +34,12 @@ router.post("/", validate(RestaurantSchema), async (req: Request, res: Response,
         const client = await initializeRedisClient()
         const id = nanoid()
         const restaurantKey = restaurantKeyById(id)
+        const bloomString = `${data.name}:${data.location}`
+        const seenBefore = await client.bf.exists(restaurantBloomKey, bloomString)
+        if(seenBefore){
+            errorResponse(res, 409, "Restaurant already exists")
+            return
+        }
         const hashData = {
             id,
             name: data.name,
@@ -43,12 +49,24 @@ router.post("/", validate(RestaurantSchema), async (req: Request, res: Response,
             ...data.cuisines.map((cuisine) => Promise.all([
                 client.sAdd(cuisineKey(cuisine), id),
                 client.sAdd(restaurantCuisinesKeyById(id), cuisine),
-                client.zAdd(restaurantsByRatingKey, {score: 0, value: id})
+                client.zAdd(restaurantsByRatingKey, {score: 0, value: id}),
+                client.bf.add(restaurantBloomKey, bloomString)
             ])),
             client.hSet(restaurantKey, hashData)
         ])
         console.log(`Added ${addResult} fields`)
         successResponse(res, hashData, "Added new restaurant")
+    } catch(err) {
+        next(err)
+    }
+})
+
+router.get("/search", async (req: Request, res: Response, next: NextFunction) => {
+    const {q} = req.query as {q: string}
+    try {
+        const client = await initializeRedisClient()
+        const results = await client.ft.search(restaurantsIndexKey, `@name:${q}`)
+        successResponse(res, results, "searched")
     } catch(err) {
         next(err)
     }

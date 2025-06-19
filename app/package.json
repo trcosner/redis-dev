@@ -6,7 +6,8 @@
   "scripts": {
    "dev": "tsx watch --env-file .env index.ts",
    "build": "tsc",
-   "start": "node --env-file .env dist/index.js"
+   "start": "node --env-file .env dist/index.js",
+   "seed": "tsx --env-file .env seed/createIndex.ts && tsx --env-file .env seed/bloomFilter.ts"
   },
   "keywords": [],
   "author": "",
