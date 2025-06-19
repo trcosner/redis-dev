@@ -4,7 +4,7 @@ import { validate } from "../middlewares/validate.js"
 import { RestaurantSchema, type Restaurant } from "../schemas/resaurant.js"
 import { initializeRedisClient } from "../utils/client.js"
 import { nanoid } from "nanoid"
-import { restaurantKeyById, reviewDetailsKeyById, reviewKeyById } from "../utils/keys.js"
+import { cuisineKey, restaurantCuisinesKeyById, restaurantKeyById, reviewDetailsKeyById, reviewKeyById } from "../utils/keys.js"
 import { successResponse, errorResponse } from "../utils/responses.js"
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId.js"
 import { ReviewSchema, type Review } from "../schemas/reviews.js"
@@ -23,7 +23,13 @@ router.post("/", validate(RestaurantSchema), async (req: Request, res: Response,
             name: data.name,
             location: data.location
         }
-        const addResult = await client.hSet(restaurantKey, hashData)
+        const addResult = await Promise.all([ 
+            ...data.cuisines.map((cuisine) => Promise.all([
+                client.sAdd(cuisineKey(cuisine), id),
+                client.sAdd(restaurantCuisinesKeyById(id), cuisine)
+            ])),
+            client.hSet(restaurantKey, hashData)
+        ])
         console.log(`Added ${addResult} fields`)
         successResponse(res, hashData, "Added new restaurant")
     } catch(err) {
